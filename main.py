@@ -22,13 +22,34 @@ Hints:
 Respond with some thoughts on the suggestion process, and then provide the suggested word.
 Format:
 <think>Thoughts on the suggestion process...</think>
-Answer: <suggested_word>
+Answer: "answer"
 """
 
 dictionary_path = "words_alpha.txt"  # Path to your dictionary file
-ollama_model = "deepseek-r1:latest" # Name of the Ollama model
-ollama_model = "deepseek-r1" # Name of the Ollama model
 ollama_url = "http://localhost:11434"  # URL for the Ollama model
+ollama_model = "deepseek-r1" # Name of the Ollama model
+ollama_model = "gemma3:1b"
+
+
+def is_neighbor(word1, word2):
+    """
+    Checks if two words are neighbors.
+
+    Two words are neighbors if they have the same length and differ by exactly one letter.
+
+    :param word1: The first word.
+    :param word2: The second word.
+    :return: True if the words are neighbors, False otherwise.
+    """
+    if len(word1) != len(word2):
+        return False
+
+    diff_count = 0
+    for i in range(len(word1)):
+        if word1[i] != word2[i]:
+            diff_count += 1
+
+    return diff_count == 1
 
 
 def valid_word_neighbors(word, dictionary):
@@ -90,7 +111,7 @@ def remove_junk(text):
     # it keeps wanting to boxed bold text, so remove those too
     junk += ['\\boxed', '\\bold', '\\text', '\\textbf', '\\textit', '\\texttt', '\\textcolor', '\\']
     for char in junk:
-        text = text.replace(char, '')
+        text = text.replace(char, ' ')
     return text.strip()
 
 
@@ -102,11 +123,11 @@ def play_word_ladder_ollama(start_word, end_word, dictionary_path,
 
     # Load the dictionary
     word_len = len(start_word)
+    dictionary = set()
     with open(dictionary_path, 'r') as f:
         lines = f.readlines()
         # we only want words with the same length as the start word
         # and we want to ignore case
-        dictionary = set()
         for word in lines:
             word = word.strip().lower()
             if len(word) == word_len:
@@ -125,6 +146,7 @@ def play_word_ladder_ollama(start_word, end_word, dictionary_path,
         print(f"Attempt {attempt + 1}/{max_attempts}")
         print(f"Current word: {current_word}")
         print(f"Target word: {target_word}")
+        print(f"History: {history_list}")
 
         # Get valid neighbors
         neighbors = valid_word_neighbors(current_word, dictionary)
@@ -156,35 +178,54 @@ def play_word_ladder_ollama(start_word, end_word, dictionary_path,
 
         # call the model
         model_response = call_ollama_model(prompt_text).strip().lower()
-        model_response = model_response.encode('utf-8').decode('utf-8')
+        model_response = model_response
         print(f"Model response: {model_response}")
 
         # Clean the response to remove junk characters
-        model_response = remove_junk(model_response).encode('utf-8').decode('utf-8')
+        model_response = remove_junk(model_response)
         print(f"Cleaned model response: {model_response}")
 
         # get just the suggested word from the response
         suggested_word = model_response.split('answer:')[-1].strip()
-        suggested_word = suggested_word.lower().encode('utf-8').decode('utf-8')
+        suggested_word = suggested_word.lower()
+        # is there a single word in the response?
+        if ' ' in suggested_word:
+            print("Multiple words found in the response. Taking the first one.")
+            suggested_word = suggested_word.split()[0]
+            # remove any punctuation
+            suggested_word = ''.join(filter(str.isalpha, suggested_word))
         print(f"Suggested word: {suggested_word}")
 
-        if suggested_word in neighbors:
-            current_word = suggested_word.encode('utf-8').decode('utf-8')
-            history_list.append(current_word)
-            print(f"Current word: {current_word}")
-        else:
-            print(f"Suggested word '{suggested_word}' is not a valid neighbor.")
-            break
+        # is the suggested word a valid neighbor?
+        is_valid = is_neighbor(suggested_word, current_word)
+        if not is_valid:
+            print(f"Suggested word '{suggested_word}' is not a valid neighbor of '{current_word}'.")
+            print("Trying again...")
+            continue
+
+        # is the suggested word in the dictionary?
+        if suggested_word not in dictionary:
+            print(f"Suggested word '{suggested_word}' is not in the dictionary.")
+            print("Trying again...")
+            continue
+
+        # update the current word and history list
+        current_word = suggested_word
+        history_list.append(current_word)
 
         # Check if we reached the target word
         if current_word == target_word:
             print("Congratulations! You've reached the target word.")
+            print("GAME_WON! turn: ", attempt + 1)
+            print("History: ", history_list)
             return
         else:
             print(f"Current word '{current_word}' is not the target word '{target_word}'.")
             print("Continuing to the next attempt...")
 
     print("Max attempts reached. Game over.")
+    print("GAME_LOST! turn: ", attempt + 1)
+    print("History: ", history_list)
 
 
 if __name__ == "__main__":
