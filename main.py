@@ -18,8 +18,15 @@ Hints:
 1. It should ideally be closer to the target word "{target_word}".
 2. You may use valid neighbors, but you are not limited to them.
 3. Consider what words you might use next turn.
+4. Pick a word with the next word in mind. Don't just depth-first search.
+5. Make a list of 5 candidate words and a sub-list of their next words.
+6. Pick the best candidate word based on the next word list.
 
-Respond with some thoughts on the suggestion process, and then provide the suggested word.
+Respond first some reasoning about which possible word creates the most possible next words.
+Second, remove words that are not valid neighbors of the current word.
+Third, remove words that are already in the history list.
+Fourth, uprank the words that are closer to the target word.
+Finally, provide the suggested word.
 Format:
 <think>Thoughts on the suggestion process...</think>
 Answer: "answer"
@@ -29,6 +36,8 @@ dictionary_path = "words_alpha.txt"  # Path to your dictionary file
 ollama_url = "http://localhost:11434"  # URL for the Ollama model
 ollama_model = "deepseek-r1" # Name of the Ollama model
 ollama_model = "gemma3:1b"
+ollama_model = "gemma3:4b"  # gemma3:4b
+
 
 
 def is_neighbor(word1, word2):
@@ -136,6 +145,7 @@ def play_word_ladder_ollama(start_word, end_word, dictionary_path,
     current_word = start_word.lower()
     target_word = end_word.lower()
     history_list = [current_word]
+    bad_guesses = []
 
     # Check if the starting and target words are valid
     if current_word not in dictionary or target_word not in dictionary:
@@ -199,12 +209,16 @@ def play_word_ladder_ollama(start_word, end_word, dictionary_path,
         # is the suggested word a valid neighbor?
         is_valid = is_neighbor(suggested_word, current_word)
         if not is_valid:
+            bad_guesses.append(suggested_word)
             print(f"Suggested word '{suggested_word}' is not a valid neighbor of '{current_word}'.")
             print("Trying again...")
             continue
 
         # is the suggested word in the dictionary?
         if suggested_word not in dictionary:
+            # if it is not in the dictionary, add it to the bad guesses
+            # even if it is already in the bad guesses list
+            bad_guesses.append(suggested_word)
             print(f"Suggested word '{suggested_word}' is not in the dictionary.")
             print("Trying again...")
             continue
